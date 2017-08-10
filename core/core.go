@@ -23,7 +23,7 @@ var DefaultTmplFuncMap = template.FuncMap{
 		if bytes.IndexByte(v, '"') == 0 {
 			v = bytes.Trim(v, "\"")
 		}
-		return fmt.Sprintf("%s\n", string(v))
+		return fmt.Sprintf("%s", string(v))
 	},
 }
 
