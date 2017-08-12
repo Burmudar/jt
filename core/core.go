@@ -4,12 +4,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"strings"
 	"text/template"
 )
 
+// DefaultTmplFuncMap are the additional functions that are available to the templates that are created by this package
+// The following functions are added:
+// - json: takes a key and a jsonRawMessage. The key is used to traverse the given json.RawMessage
+// - str: converts bytes to string
 var DefaultTmplFuncMap = template.FuncMap{
 	"json": func(k string, v json.RawMessage) json.RawMessage {
 		m := make(map[string]json.RawMessage)
@@ -45,6 +50,8 @@ func readTemplate(path string) ([]byte, error) {
 	return data, err
 }
 
+// ToJSONMap unmarshalls the given data into a map where the keys are strings and the values are json.RawMessage.
+// Data is expected to be valid JSON
 func ToJSONMap(data []byte) (map[string]json.RawMessage, error) {
 	contentMap := make(map[string]json.RawMessage)
 	if err := json.Unmarshal(data, &contentMap); err != nil {
@@ -74,11 +81,21 @@ func jsonKey(key string, jsonMap map[string]json.RawMessage) json.RawMessage {
 	return jsonMap[cmp[len(cmp)-1]]
 }
 
-func NewTemplate(data string) (*template.Template, error) {
-	tmpl, err := template.New("json").Funcs(DefaultTmplFuncMap).Parse(data)
+// NewTemplate creates a new template using the provided data as the template data to be parsed.
+// If no name is provided the default name is "json"
+func NewTemplate(name, data string) (*template.Template, error) {
+	if name == "" {
+		name = "json"
+	}
+	tmpl, err := template.New(name).Funcs(DefaultTmplFuncMap).Parse(data)
 	return tmpl, err
 }
 
-func ApplyTemplate(tmpl *template.Template, ctx map[string]json.RawMessage) error {
-	return tmpl.Execute(os.Stdout, ctx)
+// ApplyTemplate takes the given template and applies the map to the template. No additional processing is done to the map.
+// If writer is nil, the template is executed to Stdout
+func ApplyTemplate(tmpl *template.Template, w io.Writer, ctx map[string]json.RawMessage) error {
+	if w == nil {
+		w = os.Stdout
+	}
+	return tmpl.Execute(w, ctx)
 }
