@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 	"text/template"
 )
@@ -25,11 +26,15 @@ var DefaultTmplFuncMap = template.FuncMap{
 		return jsonKey(k, m)
 	},
 	"str": func(v []byte) string {
-		if bytes.IndexByte(v, '"') == 0 {
-			v = bytes.Trim(v, "\"")
-		}
-		return fmt.Sprintf("%s", string(v))
+		return fmt.Sprintf("%s", string(trimQuotes(v)))
 	},
+}
+
+func trimQuotes(v []byte) []byte {
+	if bytes.IndexByte(v, '"') == 0 {
+		v = bytes.Trim(v, "\"")
+	}
+	return v
 }
 
 func readInput(path string) ([]byte, error) {
@@ -73,12 +78,46 @@ func traverseJSON(k string, jsonMap map[string]json.RawMessage) map[string]json.
 	}
 }
 
+func arrayJSON(key string, jsonMap map[string]json.RawMessage) json.RawMessage {
+	index, err := strconv.Atoi(string(key[len(key)-2]))
+	if err != nil {
+		panic(err)
+	}
+	key = string(key[:len(key)-3])
+	v := jsonMap[key]
+	arr := make([]json.RawMessage, 0)
+	json.Unmarshal(v, &arr)
+	return arr[index]
+}
+
 func jsonKey(key string, jsonMap map[string]json.RawMessage) json.RawMessage {
 	cmp := strings.Split(key, ".")
-	for i := 0; i < len(cmp)-1; i++ {
-		jsonMap = traverseJSON(cmp[i], jsonMap)
+	isArrIndexKey := func(k string) bool {
+		size := len(k)
+		leftB := strings.LastIndex(k, "[")
+		rightB := strings.LastIndex(k, "]")
+		//are the brackets at the end of the key or somewhere before that... which doesn't make sense
+		if leftB == size-3 && rightB == size-1 {
+			return true
+		}
+		return false
 	}
-	return jsonMap[cmp[len(cmp)-1]]
+	for i := 0; i < len(cmp)-1; i++ {
+		if isArrIndexKey(cmp[i]) {
+			if m, err := ToJSONMap(arrayJSON(cmp[i], jsonMap)); err != nil {
+				panic(err)
+			} else {
+				jsonMap = m
+			}
+		} else {
+			jsonMap = traverseJSON(cmp[i], jsonMap)
+		}
+	}
+	key = cmp[len(cmp)-1]
+	if isArrIndexKey(key) {
+		return arrayJSON(key, jsonMap)
+	}
+	return jsonMap[key]
 }
 
 // NewTemplate creates a new template using the provided data as the template data to be parsed.

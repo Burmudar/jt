@@ -59,7 +59,7 @@ func innerMain(cfg config) error {
 	}
 	template, err := core.NewTemplate("json", data)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create template: %v", err)
 	}
 	return core.ApplyTemplate(template, nil, jsonMap)
 }

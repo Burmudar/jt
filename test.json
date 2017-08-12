@@ -3,7 +3,11 @@
       "title":"example glossary",
       "GlossDiv":{  
          "title":"S",
-         "GlossList":{  
+         "GlossList":{
+			 "Members": [
+				 { "Name": "William"},
+				  {"Name": "Michael"}
+			 ],
             "GlossEntry":{  
                "ID":"SGML",
                "SortAs":"SGML",
@@ -21,5 +25,19 @@
             }
          }
       }
-   }
+   },
+   "appendix": [
+	   {
+		   "title": "My Title",
+			"page": 21
+	   },
+	   {
+		   "title": "My Other Title",
+			"page": 31
+	   },
+	   {
+		   "title": "My Other Other Title",
+			"page": 41
+	   }
+   ]
 }
