@@ -9,6 +9,11 @@ import (
 	"github.com/Burmudar/jt/core"
 )
 
+var BuildDate string = "UNKOWN"
+var GitCommit string = "UNKOWN"
+var GitBranch string = "UNKOWN"
+var Version string = "UNKOWN"
+
 type config struct {
 	input          *string
 	template       *string
@@ -69,9 +74,12 @@ func main() {
 	cfg.input = flag.String("input-file", "stdin", "specify the file to read input from")
 	cfg.template = flag.String("template", "", "Specify the template file to apply")
 	cfg.inlineTemplate = flag.String("inline-template", "", "Specify the template inline to apply")
+	version := flag.Bool("version", false, "print the version")
 	flag.Parse()
 
-	if err := innerMain(cfg); err != nil {
+	if *version {
+		fmt.Printf("JSON-Template - Apply a Golang template to JSON data\nDate: %s\nCommit: %s\nBranch: %s\nVersion: %s\n", BuildDate, GitCommit, GitBranch, Version)
+	} else if err := innerMain(cfg); err != nil {
 		fmt.Printf("unexpected error: %v\n", err)
 	}
 }
