@@ -17,14 +17,7 @@ import (
 // - json: takes a key and a jsonRawMessage. The key is used to traverse the given json.RawMessage
 // - str: converts bytes to string
 var DefaultTmplFuncMap = template.FuncMap{
-	"json": func(k string, v json.RawMessage) json.RawMessage {
-		m := make(map[string]json.RawMessage)
-		err := json.Unmarshal(v, &m)
-		if err != nil {
-			panic(err)
-		}
-		return jsonKey(k, m)
-	},
+	"json": jsonKey,
 	"str": func(v []byte) string {
 		return fmt.Sprintf("%s", string(trimQuotes(v)))
 	},
@@ -65,59 +58,76 @@ func ToJSONMap(data []byte) (map[string]json.RawMessage, error) {
 	return contentMap, nil
 }
 
-func traverseJSON(k string, jsonMap map[string]json.RawMessage) map[string]json.RawMessage {
-	if msg, ok := jsonMap[k]; !ok {
-		panic(fmt.Errorf("not valid key in json: %q", k))
-	} else {
-		m := make(map[string]json.RawMessage)
-		err := json.Unmarshal(msg, &m)
+func mapJSON(key string, data json.RawMessage) (json.RawMessage, error) {
+	if isArrIndexKey(key) {
+		key = key[:strings.LastIndex(key, "[")]
+	}
+	m := make(map[string]json.RawMessage)
+	err := json.Unmarshal(data, &m)
+	if err != nil {
+		return nil, err
+	}
+	return m[key], nil
+}
+
+func arrayJSON(key string, data json.RawMessage) (json.RawMessage, error) {
+	index, err := strconv.Atoi(string(key[len(key)-2]))
+	if err != nil {
+		return nil, err
+	}
+	arr := make([]json.RawMessage, 0)
+	json.Unmarshal(data, &arr)
+	if index >= len(data) {
+		return nil, fmt.Errorf("key[%s] index out of range: %v", key, string(data))
+	}
+	return arr[index], nil
+}
+
+func isArrIndexKey(k string) bool {
+	size := len(k)
+	leftB := strings.LastIndex(k, "[")
+	rightB := strings.LastIndex(k, "]")
+	//are the brackets at the end of the key or somewhere before that... which doesn't make sense
+	if leftB == size-3 && rightB == size-1 {
+		return true
+	}
+	return false
+}
+
+func ParseHandler(k string) func(v json.RawMessage) (json.RawMessage, error) {
+	if isArrIndexKey(k) {
+		return func(v json.RawMessage) (json.RawMessage, error) {
+			data, err := mapJSON(k[:strings.LastIndex(k,"[")], v)
+			if err == nil {
+				v = data
+			}
+			return arrayJSON(k, v)
+		}
+	}
+	return func(v json.RawMessage) (json.RawMessage, error) {
+		return mapJSON(k, v)
+	}
+}
+
+func jsonKey(key string, v json.RawMessage) json.RawMessage {
+	cmp := strings.Split(key, ".")
+	type parseFn func(data json.RawMessage) (json.RawMessage, error)
+	parsers := make([]parseFn, 0)
+	for i := 0; i < len(cmp); i++ {
+		parsers = append(parsers, ParseHandler(cmp[i]))
+	}
+	for _, fn := range parsers {
+		if len(v) == 0 {
+			fmt.Fprint(os.Stderr, fmt.Errorf("no json to parse"))
+			break
+		}
+		data, err := fn(v)
 		if err != nil {
 			panic(err)
 		}
-		return m
+		v = data
 	}
-}
-
-func arrayJSON(key string, jsonMap map[string]json.RawMessage) json.RawMessage {
-	index, err := strconv.Atoi(string(key[len(key)-2]))
-	if err != nil {
-		panic(err)
-	}
-	key = string(key[:len(key)-3])
-	v := jsonMap[key]
-	arr := make([]json.RawMessage, 0)
-	json.Unmarshal(v, &arr)
-	return arr[index]
-}
-
-func jsonKey(key string, jsonMap map[string]json.RawMessage) json.RawMessage {
-	cmp := strings.Split(key, ".")
-	isArrIndexKey := func(k string) bool {
-		size := len(k)
-		leftB := strings.LastIndex(k, "[")
-		rightB := strings.LastIndex(k, "]")
-		//are the brackets at the end of the key or somewhere before that... which doesn't make sense
-		if leftB == size-3 && rightB == size-1 {
-			return true
-		}
-		return false
-	}
-	for i := 0; i < len(cmp)-1; i++ {
-		if isArrIndexKey(cmp[i]) {
-			if m, err := ToJSONMap(arrayJSON(cmp[i], jsonMap)); err != nil {
-				panic(err)
-			} else {
-				jsonMap = m
-			}
-		} else {
-			jsonMap = traverseJSON(cmp[i], jsonMap)
-		}
-	}
-	key = cmp[len(cmp)-1]
-	if isArrIndexKey(key) {
-		return arrayJSON(key, jsonMap)
-	}
-	return jsonMap[key]
+	return v
 }
 
 // NewTemplate creates a new template using the provided data as the template data to be parsed.
@@ -132,7 +142,7 @@ func NewTemplate(name, data string) (*template.Template, error) {
 
 // ApplyTemplate takes the given template and applies the map to the template. No additional processing is done to the map.
 // If writer is nil, the template is executed to Stdout
-func ApplyTemplate(tmpl *template.Template, w io.Writer, ctx map[string]json.RawMessage) error {
+func ApplyTemplate(tmpl *template.Template, w io.Writer, ctx map[string]json.RawMessage ) error {
 	if w == nil {
 		w = os.Stdout
 	}

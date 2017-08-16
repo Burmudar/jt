@@ -57,9 +57,9 @@ func innerMain(cfg config) error {
 	if err != nil {
 		return fmt.Errorf("failed to read template")
 	}
-	template, err := core.NewTemplate("json", data)
+	template, err := core.NewTemplate("",data)
 	if err != nil {
-		return fmt.Errorf("failed to create template: %v", err)
+		return err
 	}
 	return core.ApplyTemplate(template, nil, jsonMap)
 }
